@@ -97,7 +97,7 @@ def classify_members(elements):
 
     return legs, braces, horizontals
 
-def assaing_brace_to_leg(braces, legs, tol=5):
+def assaing_brace_to_leg(braces, legs, tol=0):
     for i in braces:
         i['Leg_Start'] = None
         i['Leg_End'] = None
@@ -114,7 +114,6 @@ def assaing_brace_to_leg(braces, legs, tol=5):
 
             if i['Leg_Start'] is not None and i['Leg_End'] is not None:
                 break
-
         if i['Leg_Start'] is None or i['Leg_End'] is None:
             print(f"Warning: Brace ID {i['ID']} missing leg linkage (tol={tol})")
 
@@ -166,11 +165,21 @@ def save_to_csv(elements, csv_path="data.csv"):
         writer.writeheader()
         writer.writerows(elements)
 
+def remove_assained_braces(braces):
+    braces_without_leg = []
+    for i in braces :
+        if i['Leg_Start'] is  None or i['Leg_End'] is  None:
+            i.pop('Leg_End')
+            i.pop('Leg_Start')
+            braces_without_leg.append(i)
+            
+    return braces_without_leg
 
 if "__main__" == __name__:
     elements = parse_sdf_to_csv("11.sdf")
     legs, braces, horizontals = classify_members(elements)
     assainged_braces = assaing_brace_to_leg(braces, legs)
+    save_to_csv(legs + horizontals + remove_assained_braces(assainged_braces))
 #    spaced_braces = space_from_legs_2(assainged_braces, 4) 
 #    save_to_csv(legs + spaced_braces + horizontals)
     visualize_tower("data.csv")
