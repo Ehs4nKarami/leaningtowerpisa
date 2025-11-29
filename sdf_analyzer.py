@@ -143,19 +143,22 @@ def space_from_legs_2(braces, space):
         return np.array([v['EndX'] - v['StartX'], v['EndY'] - v['StartY'], v['EndZ'] - v['StartZ']])
     for brace in braces:
         v_brace = vec(brace)
-        v_leg_start = vec(brace['Leg_Start'])
-        v_leg_end = vec(brace['Leg_End'])
-        angle1 = np.arccos(np.dot(v_brace, v_leg_start) / (np.linalg.norm(v_brace) * np.linalg.norm(v_leg_start)))
-        angle2 = np.arccos(np.dot(v_brace, v_leg_end) / (np.linalg.norm(v_brace) * np.linalg.norm(v_leg_end)))
-        k1 = space / np.sin(angle1)
-        k2 = space / np.sin(angle2)
-        unit_brace = v_brace / np.linalg.norm(v_brace)
-        brace['StartX'] += k1 * unit_brace[0]
-        brace['StartY'] += k1 * unit_brace[1]
-        brace['StartZ'] += k1 * unit_brace[2]
-        brace['EndX'] -= k2 * unit_brace[0]
-        brace['EndY'] -= k2 * unit_brace[1]
-        brace['EndZ'] -= k2 * unit_brace[2]
+        if brace['Leg_Start'] is not None :
+            v_leg_start = vec(brace['Leg_Start'])
+            angle1 = np.arccos(np.dot(v_brace, v_leg_start) / (np.linalg.norm(v_brace) * np.linalg.norm(v_leg_start)))
+            k1 = space / np.sin(angle1)
+            unit_brace = v_brace / np.linalg.norm(v_brace)
+            brace['StartX'] += k1 * unit_brace[0]
+            brace['StartY'] += k1 * unit_brace[1]
+            brace['StartZ'] += k1 * unit_brace[2]
+        
+        if  brace['Leg_End'] is not None:
+            v_leg_end = vec(brace['Leg_End'])
+            angle2 = np.arccos(np.dot(v_brace, v_leg_end) / (np.linalg.norm(v_brace) * np.linalg.norm(v_leg_end)))
+            k2 = space / np.sin(angle2)
+            brace['EndX'] -= k2 * unit_brace[0]
+            brace['EndY'] -= k2 * unit_brace[1]
+            brace['EndZ'] -= k2 * unit_brace[2]
     return braces
 
 
@@ -168,7 +171,6 @@ def save_to_csv(elements, csv_path="data.csv"):
 def remove_assained_braces(braces):
     braces_without_leg = []
     for i in braces :
-        if i['Leg_Start'] is  None or i['Leg_End'] is  None:
             i.pop('Leg_End')
             i.pop('Leg_Start')
             braces_without_leg.append(i)
@@ -179,8 +181,7 @@ if "__main__" == __name__:
     elements = parse_sdf_to_csv("11.sdf")
     legs, braces, horizontals = classify_members(elements)
     assainged_braces = assaing_brace_to_leg(braces, legs)
+    spaced_braces = space_from_legs_2(assainged_braces, 0.1) 
     save_to_csv(legs + horizontals + remove_assained_braces(assainged_braces))
-#    spaced_braces = space_from_legs_2(assainged_braces, 4) 
-#    save_to_csv(legs + spaced_braces + horizontals)
     visualize_tower("data.csv")
 
