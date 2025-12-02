@@ -177,11 +177,54 @@ def remove_assained_braces(braces):
             
     return braces_without_leg
 
+def center_of_tower(legs):
+    sum_x = 0
+    sum_y = 0
+    for leg in legs:
+        sum_x += leg['StartX']
+        sum_y += leg['StartY']
+    return [sum_x / len(legs), sum_y / len(legs), 0]
+
+def push_out_of_leg(braces, center_t, space):
+    def vec(v):
+        return np.array([v['EndX'] - v['StartX'], 
+                         v['EndY'] - v['StartY'], 
+                         v['EndZ'] - v['StartZ']])
+
+    def vec_center(brace):
+        return np.array([center_t[0] - brace['StartX'], 
+                         center_t[1] - brace['StartY'], 
+                         center_t[2] - brace['StartZ']])
+    for brace in braces:
+        v_brace = vec(brace)
+        if brace['Leg_Start']:
+            v_leg = vec(brace['Leg_Start'])
+        else:
+            v_leg = vec(brace['Leg_End'])
+        cross_vec = np.cross(v_brace, v_leg)
+        side = np.dot(cross_vec, vec_center(brace))
+        if np.linalg.norm(cross_vec) == 0:
+            continue
+        dir_vec = cross_vec / np.linalg.norm(cross_vec)
+        if side >= 0:
+            dir_vec = -dir_vec
+        brace['StartX'] += dir_vec[0] * space
+        brace['EndX']   += dir_vec[0] * space
+        brace['StartY'] += dir_vec[1] * space
+        brace['EndY']   += dir_vec[1] * space
+        brace['StartZ'] += dir_vec[2] * space
+        brace['EndZ']   += dir_vec[2] * space
+
+    return braces
+        
+
 if "__main__" == __name__:
     elements = parse_sdf_to_csv("11.sdf")
     legs, braces, horizontals = classify_members(elements)
     assainged_braces = assaing_brace_to_leg(braces, legs)
     spaced_braces = space_from_legs_2(assainged_braces, 0.1) 
+    center_tower = center_of_tower(legs)
+    pushed_out_braces = push_out_of_leg(assainged_braces, center_tower, 1)
     save_to_csv(legs + horizontals + remove_assained_braces(assainged_braces))
     visualize_tower("data.csv")
 
