@@ -223,7 +223,7 @@ if "__main__" == __name__:
     legs, braces, horizontals = classify_members(elements)
     assainged_braces = assaing_brace_to_leg(braces, legs)
     save_to_csv(assainged_braces,"assainged_braaces.csv")
-    spaced_braces = space_from_legs_2(assainged_braces, 0) 
+    spaced_braces = space_from_legs_2(assainged_braces, 0.05) 
     center_tower = center_of_tower(legs)
     pushed_out_braces = push_out_of_leg(assainged_braces, center_tower, 0)
     save_to_csv(legs + horizontals + remove_assained_braces(assainged_braces))
