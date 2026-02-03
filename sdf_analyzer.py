@@ -223,9 +223,14 @@ if "__main__" == __name__:
     elements = parse_sdf_to_csv("11.sdf")
     legs, braces, horizontals = classify_members(elements)
     assainged_braces = assaing_brace_to_leg(braces, legs)
-    spaced_braces = space_from_legs_2(assainged_braces, 0.1) 
+    save_to_csv(assainged_braces,"assainged_braaces.csv")
+    spaced_braces = space_from_legs_2(assainged_braces, 0) 
     center_tower = center_of_tower(legs)
+<<<<<<< HEAD
     pushed_out_braces = push_out_of_leg(assainged_braces, center_tower, 0.1)
+=======
+    pushed_out_braces = push_out_of_leg(assainged_braces, center_tower, 0)
+>>>>>>> refs/remotes/origin/main
     save_to_csv(legs + horizontals + remove_assained_braces(assainged_braces))
     visualize_tower("data.csv")
 
