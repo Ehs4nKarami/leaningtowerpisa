@@ -271,12 +271,15 @@ def visualize_tower(csv_path):
     legs = df[df.MemberClass=='leg']
     face_members = df[df.MemberClass.isin(['brace','horizontal'])]
     face_members.to_csv("12.csv")
+
     for _,member in face_members.iterrows():
-        dists = [(np.linalg.norm(midpoint(member)-midpoint(l)),l) for _,l in legs.iterrows()]
-        print(len(dists))
-        dists.sort(key=lambda x:x[0])
-        leg1,leg2 = dists[0][1], dists[1][1]
+        dists_start = [(np.linalg.norm([member.loc['StartX'],member.loc['StartY'],member.loc['StartZ']]-midpoint(l)),l) for _,l in legs.iterrows()]
+        dists_start.sort(key=lambda x:x[0])
+        dists_end = [(np.linalg.norm([member.loc['EndX'],member.loc['EndY'],member.loc['EndZ']]-midpoint(l)),l) for _,l in legs.iterrows()]
+        dists_end.sort(key=lambda x:x[0])
+        leg1,leg2 = dists_start[0][1], dists_end[0][1]
         n_face = face_normal(leg1,leg2)
+        print(n_face)
         for A,B in [(leg1,leg2),(leg2,leg1)]:
             leg_width,_ = parse_section_dims(A['Section'])
             p_line,d_line = offset_leg_line(A,B,leg_width)
