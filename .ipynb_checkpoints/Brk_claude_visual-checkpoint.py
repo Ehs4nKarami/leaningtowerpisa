@@ -270,12 +270,12 @@ def visualize_tower(csv_path):
     # ----- HOLES ON BRACES + HORIZONTALS -----
     legs = df[df.MemberClass=='leg']
     face_members = df[df.MemberClass.isin(['brace','horizontal'])]
-    face_members.to_csv("12.csv")
+
     for _,member in face_members.iterrows():
         dists = [(np.linalg.norm(midpoint(member)-midpoint(l)),l) for _,l in legs.iterrows()]
-        print(len(dists))
         dists.sort(key=lambda x:x[0])
         leg1,leg2 = dists[0][1], dists[1][1]
+
         n_face = face_normal(leg1,leg2)
         for A,B in [(leg1,leg2),(leg2,leg1)]:
             leg_width,_ = parse_section_dims(A['Section'])
