@@ -273,13 +273,45 @@ def visualize_tower(csv_path):
     face_members.to_csv("12.csv")
 
     for _,member in face_members.iterrows():
-        dists_start = [(np.linalg.norm([member.loc['StartX'],member.loc['StartY'],member.loc['StartZ']]-midpoint(l)),l) for _,l in legs.iterrows()]
-        dists_start.sort(key=lambda x:x[0])
-        dists_end = [(np.linalg.norm([member.loc['EndX'],member.loc['EndY'],member.loc['EndZ']]-midpoint(l)),l) for _,l in legs.iterrows()]
-        dists_end.sort(key=lambda x:x[0])
-        leg1,leg2 = dists_start[0][1], dists_end[0][1]
+        p_start = np.array([member.loc['StartX'], member.loc['StartY'], member.loc['StartZ']])
+        p_end   = np.array([member.loc['EndX'],   member.loc['EndY'],   member.loc['EndZ']])
+
+        dists_start = [
+            (np.linalg.norm(p_start - midpoint(l)), l)
+            for _, l in legs.iterrows()
+            if min(l.loc['StartZ'], l.loc['EndZ']) <= member.loc['StartZ'] <= max(l.loc['StartZ'], l.loc['EndZ'])
+        ]
+
+        dists_end = [
+            (np.linalg.norm(p_end - midpoint(l)), l)
+            for _, l in legs.iterrows()
+            if min(l.loc['StartZ'], l.loc['EndZ']) <= member.loc['EndZ'] <= max(l.loc['StartZ'], l.loc['EndZ'])
+        ]
+
+        if not dists_start or not dists_end:
+            raise ValueError("No matching legs found for brace")
+
+        dists_start.sort(key=lambda x: x[0])
+        dists_end.sort(key=lambda x: x[0])
+
+        leg1 = dists_start[0][1]
+        leg2 = dists_end[0][1]
         n_face = face_normal(leg1,leg2)
-        print(n_face)
+        #draw normal face of each brace
+        nx, ny, nz = [], [], []
+        mid = midpoint(member)
+        vec_face_x = n_face[0] + mid[0]
+        vec_face_y = n_face[1] + mid[1]
+        vec_face_z = n_face[2] + mid[2]
+        nx.extend([mid[0], vec_face_x, None])
+        ny.extend([mid[1], vec_face_y, None])
+        nz.extend([mid[2], vec_face_z, None])
+        fig.add_trace(go.Scatter3d(
+            x=nx, y=ny, z=nz,
+            mode='lines',
+            line=dict(color='yellow', width=6),
+            name='Brace n_face'
+        ))
         for A,B in [(leg1,leg2),(leg2,leg1)]:
             leg_width,_ = parse_section_dims(A['Section'])
             p_line,d_line = offset_leg_line(A,B,leg_width)
