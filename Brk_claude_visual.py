@@ -248,7 +248,7 @@ def visualize_tower(csv_path):
 
     # ----- SOLIDS -----
     for cls,color in [('leg','red'),('brace','#00FF00'),('horizontal','blue')]:
-        xs,ys,zs,i,j,k = [],[],[],[],[],[]
+        xs,ys,zs,i,j,k,hover_ids = [],[],[],[],[],[],[]
         off = 0
         for _,row in df[df.MemberClass==cls].iterrows():
             if cls=='leg':
@@ -256,7 +256,7 @@ def visualize_tower(csv_path):
             else:
                 verts,idxs = get_oriented_box(row)
             for v in verts:
-                xs.append(v[0]); ys.append(v[1]); zs.append(v[2])
+                xs.append(v[0]); ys.append(v[1]); zs.append(v[2]); hover_ids.append(row.loc["ID"]) 
             for t in range(0,len(idxs),3):
                 i.append(idxs[t]+off)
                 j.append(idxs[t+1]+off)
@@ -264,7 +264,13 @@ def visualize_tower(csv_path):
             off+=len(verts)
         fig.add_trace(go.Mesh3d(
             x=xs,y=ys,z=zs,i=i,j=j,k=k,
-            color=color,opacity=1
+            color=color,opacity=1,
+            customdata=hover_ids,
+            hovertemplate=(
+                "<b>Member ID:</b> %{customdata}<br>"
+                "<b>Type:</b> " + cls + "<br>"
+                "<extra></extra>"
+            )
         ))
 
     # ----- HOLES ON BRACES + HORIZONTALS -----
@@ -293,9 +299,17 @@ def visualize_tower(csv_path):
 
         dists_start.sort(key=lambda x: x[0])
         dists_end.sort(key=lambda x: x[0])
-
+        
         leg1 = dists_start[0][1]
         leg2 = dists_end[0][1]
+
+
+        # check if the end of the brace exacly on the middle point
+        if leg2.loc['ID'] == leg1.loc['ID']:
+            if dists_start[0][0] == dists_start[1][0]:
+                leg1 = dists_start[1][1]
+            else:
+                leg2 = dists_end[1][1]
         n_face = face_normal(leg1,leg2)
         #draw normal face of each brace
         nx, ny, nz = [], [], []
@@ -333,11 +347,11 @@ def visualize_tower(csv_path):
             fig.add_trace(go.Mesh3d(
                 x=xs,y=ys,z=zs,
                 i=idx[0::3],j=idx[1::3],k=idx[2::3],
-                color='black',opacity=1
+                color='black',opacity=1,
             ))
 
     fig.update_layout(
-        scene=dict(aspectmode='data'),
+        scene=dict(aspectmode='cube'),
         width=1200,height=900,
         title="BRK Visualizer – Holes on Braces & Horizontals"
     )
