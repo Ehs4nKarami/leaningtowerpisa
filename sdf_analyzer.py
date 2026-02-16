@@ -1,6 +1,6 @@
 import csv
 import re
-from tower_visualizer import visualize_tower
+from tower_visualizer import visualize_tower, merge_holes_with_members
 import pandas as pd
 import numpy as np
 
@@ -219,7 +219,6 @@ def push_out_of_leg(braces, center_t, space):
         
 
 if "__main__" == __name__:
-#    a = {"ID":001000045, "Type":"beam", "Section":l80x6, ""}
     elements = parse_sdf_to_csv("11.sdf")
     legs, braces, horizontals = classify_members(elements)
     assainged_braces = assaing_brace_to_leg(braces, legs)
@@ -229,5 +228,18 @@ if "__main__" == __name__:
     pushed_out_braces = push_out_of_leg(assainged_braces, center_tower, 0)
     pushed_out_braces = push_out_of_leg(assainged_braces, center_tower, 0)
     save_to_csv(legs + horizontals + remove_assained_braces(assainged_braces))
-    visualize_tower("data.csv")
-
+    
+    # Visualize and get holes
+    print("\n" + "="*50)
+    print("Starting visualization and hole detection...")
+    print("="*50 + "\n")
+    holes = visualize_tower("data.csv", save_holes=True)
+    
+    # Merge holes back into member data
+    print("\n" + "="*50)
+    print("Merging holes with member data...")
+    print("="*50 + "\n")
+    merge_holes_with_members("data.csv", "holes_data.csv", "data_with_holes.csv")
+    
+    print(f"\nTotal holes found: {len(holes)}")
+    print("Processing complete!")

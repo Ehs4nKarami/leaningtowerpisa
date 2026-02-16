@@ -2,6 +2,7 @@ import pandas as pd
 import plotly.graph_objects as go
 import numpy as np
 import re
+import csv
 
 # ==========================================================
 # CONSTANTS
@@ -58,6 +59,13 @@ def midpoint(row):
         (row['StartZ'] + row['EndZ']) / 2
     ])
 
+def calculate_length(row):
+    """Calculate the length of a member"""
+    dx = row['EndX'] - row['StartX']
+    dy = row['EndY'] - row['StartY']
+    dz = row['EndZ'] - row['StartZ']
+    return np.sqrt(dx*dx + dy*dy + dz*dz)
+
 # ==========================================================
 # SECTION PARSING
 # ==========================================================
@@ -97,7 +105,7 @@ def create_cuboid(p1, p2, p3, p4, p5, p6, p7, p8):
     return vertices, indices
 
 # ==========================================================
-# LEG MESH (UNCHANGED)
+# LEG MESH
 # ==========================================================
 
 def generate_leg_mesh(row):
@@ -176,7 +184,7 @@ def get_oriented_box(row):
     return create_cuboid(*s,*e)
 
 # ==========================================================
-# FACE + HOLE GEOMETRY (UNCHANGED LOGIC)
+# FACE + HOLE GEOMETRY
 # ==========================================================
 
 def face_normal(leg1, leg2):
@@ -237,14 +245,234 @@ def generate_cylinder(center, axis, radius, height, segments=24):
     return verts, idx
 
 # ==========================================================
+# HOLE DATA SAVING
+# ==========================================================
+
+def save_holes_to_csv(holes_data, csv_path="holes_data.csv"):
+    """Save hole information to CSV file"""
+    
+    if not holes_data:
+        print("No holes data to save")
+        return
+    
+    with open(csv_path, "w", newline="") as csvfile:
+        fieldnames = [
+            "MemberID", "MemberType", "Section", 
+            "HoleNumber", "HoleCenterX", "HoleCenterY", "HoleCenterZ",
+            "NormalX", "NormalY", "NormalZ",
+            "ConnectedLegID", "Radius", "Depth"
+        ]
+        writer = csv.DictWriter(csvfile, fieldnames=fieldnames)
+        writer.writeheader()
+        writer.writerows(holes_data)
+    
+    print(f"✓ Saved {len(holes_data)} holes to {csv_path}")
+
+def merge_holes_with_members(csv_path, holes_csv="holes_data.csv", output_csv="data_with_holes.csv"):
+    """Merge hole information back into member data"""
+    
+    # Read original data
+    df = pd.read_csv(csv_path)
+    
+    # Read holes data
+    try:
+        holes_df = pd.read_csv(holes_csv)
+    except FileNotFoundError:
+        print(f"Error: {holes_csv} not found. Run visualize_tower first.")
+        return None
+    
+    # Group holes by member
+    holes_grouped = holes_df.groupby('MemberID').apply(
+        lambda x: x.to_dict('records')
+    ).to_dict()
+    
+    # Add holes information as JSON string
+    df['Holes'] = df['ID'].apply(
+        lambda x: str(holes_grouped.get(int(x), []))
+    )
+    
+    # Also add hole count
+    df['HoleCount'] = df['ID'].apply(
+        lambda x: len(holes_grouped.get(int(x), []))
+    )
+    
+    # Save merged data
+    df.to_csv(output_csv, index=False)
+    print(f"✓ Saved merged data to {output_csv}")
+    
+    return df
+
+# ==========================================================
+# NEW: BRACE ANALYSIS BY SECTION
+# ==========================================================
+
+def analyze_braces_by_section(csv_path, holes_csv="holes_data.csv", output_csv="braces_analysis.csv"):
+    """
+    Analyze braces grouped by section with hole distance information
+    
+    Output columns:
+    - Section: The section type (e.g., L40x4, L50x5)
+    - BraceID: Member ID
+    - Length: Total length of the brace
+    - Hole1_DistFromStart: Distance from start point to first hole
+    - Hole2_DistFromEnd: Distance from end point to second hole
+    """
+    
+    # Read member data
+    df = pd.read_csv(csv_path)
+    df["MemberClass"] = df.apply(classify_member, axis=1)
+    
+    # Filter only braces
+    braces = df[df.MemberClass == 'brace'].copy()
+    
+    # Read holes data
+    try:
+        holes_df = pd.read_csv(holes_csv)
+    except FileNotFoundError:
+        print(f"Error: {holes_csv} not found. Run visualize_tower first.")
+        return None
+    
+    # Calculate brace lengths
+    braces['Length'] = braces.apply(calculate_length, axis=1)
+    
+    # Initialize result list
+    results = []
+    
+    print(f"\nAnalyzing {len(braces)} braces...")
+    
+    for _, brace in braces.iterrows():
+        brace_id = int(brace['ID'])
+        
+        # Get holes for this brace
+        brace_holes = holes_df[holes_df['MemberID'] == brace_id].copy()
+        
+        if len(brace_holes) == 0:
+            # No holes found
+            results.append({
+                'Section': brace['Section'],
+                'BraceID': brace_id,
+                'Length': round(brace['Length'], 4),
+                'Hole1_DistFromStart': None,
+                'Hole2_DistFromEnd': None
+            })
+            continue
+        
+        # Brace start and end points
+        start_point = np.array([brace['StartX'], brace['StartY'], brace['StartZ']])
+        end_point = np.array([brace['EndX'], brace['EndY'], brace['EndZ']])
+        
+        # Calculate distances from start to each hole
+        hole_distances = []
+        for _, hole in brace_holes.iterrows():
+            hole_center = np.array([hole['HoleCenterX'], hole['HoleCenterY'], hole['HoleCenterZ']])
+            dist_from_start = np.linalg.norm(hole_center - start_point)
+            dist_from_end = np.linalg.norm(hole_center - end_point)
+            hole_distances.append({
+                'hole_num': hole['HoleNumber'],
+                'dist_from_start': dist_from_start,
+                'dist_from_end': dist_from_end
+            })
+        
+        # Sort by distance from start
+        hole_distances.sort(key=lambda x: x['dist_from_start'])
+        
+        # Get first and last holes
+        if len(hole_distances) >= 1:
+            hole1_dist = hole_distances[0]['dist_from_start']
+        else:
+            hole1_dist = None
+            
+        if len(hole_distances) >= 2:
+            hole2_dist = hole_distances[-1]['dist_from_end']
+        elif len(hole_distances) == 1:
+            hole2_dist = hole_distances[0]['dist_from_end']
+        else:
+            hole2_dist = None
+        
+        results.append({
+            'Section': brace['Section'],
+            'BraceID': brace_id,
+            'Length': round(brace['Length'], 4),
+            'Hole1_DistFromStart': round(hole1_dist, 4) if hole1_dist is not None else None,
+            'Hole2_DistFromEnd': round(hole2_dist, 4) if hole2_dist is not None else None
+        })
+    
+    # Convert to DataFrame and sort by Section
+    results_df = pd.DataFrame(results)
+    results_df = results_df.sort_values(['Section', 'BraceID'])
+    
+    # Save to CSV
+    results_df.to_csv(output_csv, index=False)
+    print(f"✓ Saved brace analysis to {output_csv}")
+    print(f"\nSummary by Section:")
+    print(results_df.groupby('Section').size())
+    
+    return results_df
+
+
+def generate_brace_bom_summary(
+    input_csv="braces_analysis.csv",
+    output_csv="braces_summary.csv"
+):
+    """
+    Generate a Bill of Materials (BOM) style summary for braces.
+    Groups identical braces by:
+        - Section
+        - Length
+        - Hole distances
+
+    Output:
+        braces_summary.csv
+    """
+
+    import pandas as pd
+
+    print("\nGenerating brace BOM summary...")
+
+    df = pd.read_csv(input_csv)
+
+    # Round to avoid floating point noise
+    df["Length"] = df["Length"].round(3)
+    df["Hole1_DistFromStart"] = df["Hole1_DistFromStart"].round(3)
+    df["Hole2_DistFromEnd"] = df["Hole2_DistFromEnd"].round(3)
+
+    summary = (
+        df.groupby(
+            ["Section", "Length", "Hole1_DistFromStart", "Hole2_DistFromEnd"]
+        )
+        .size()
+        .reset_index(name="Quantity")
+        .sort_values(["Section", "Quantity"], ascending=[True, False])
+    )
+
+    # Add a simple PartID for fabrication reference
+    summary.insert(0, "PartID", range(1, len(summary) + 1))
+
+    summary.to_csv(output_csv, index=False)
+
+    print(f"✓ Brace BOM written to: {output_csv}")
+    print(f"✓ Unique brace types: {len(summary)}")
+    print(f"✓ Total braces: {summary['Quantity'].sum()}")
+
+    return summary
+# --------------------------------------------------
+# FINAL STEP: Generate brace BOM summary
+# --------------------------------------------------
+generate_brace_bom_summary(
+    input_csv="braces_analysis.csv",
+    output_csv="braces_summary.csv"
+)
+
+# ==========================================================
 # MAIN VISUALIZER
 # ==========================================================
 
-def visualize_tower(csv_path):
+def visualize_tower(csv_path, save_holes=True):
     df = pd.read_csv(csv_path)
     df["MemberClass"] = df.apply(classify_member, axis=1)
 
     fig = go.Figure()
+    holes_data = []  # Store hole information
 
     # ----- SOLIDS -----
     for cls,color in [('leg','red'),('brace','#00FF00'),('horizontal','blue')]:
@@ -276,9 +504,10 @@ def visualize_tower(csv_path):
     # ----- HOLES ON BRACES + HORIZONTALS -----
     legs = df[df.MemberClass=='leg']
     face_members = df[df.MemberClass.isin(['brace','horizontal'])]
-    face_members.to_csv("12.csv")
 
-    for _,member in face_members.iterrows():
+    print(f"Processing {len(face_members)} braces/horizontals for holes...")
+
+    for idx, member in face_members.iterrows():
         p_start = np.array([member.loc['StartX'], member.loc['StartY'], member.loc['StartZ']])
         p_end   = np.array([member.loc['EndX'],   member.loc['EndY'],   member.loc['EndZ']])
 
@@ -295,7 +524,8 @@ def visualize_tower(csv_path):
         ]
 
         if not dists_start or not dists_end:
-            raise ValueError("No matching legs found for brace")
+            print(f"⚠ Warning: No matching legs found for member {member.loc['ID']}")
+            continue
 
         dists_start.sort(key=lambda x: x[0])
         dists_end.sort(key=lambda x: x[0])
@@ -303,63 +533,87 @@ def visualize_tower(csv_path):
         leg1 = dists_start[0][1]
         leg2 = dists_end[0][1]
 
-
-        # check if the end of the brace exacly on the middle point
+        # Check if the end of the brace exactly on the middle point
         if leg2.loc['ID'] == leg1.loc['ID']:
-            if dists_start[0][0] == dists_start[1][0]:
+            if len(dists_start) > 1 and dists_start[0][0] == dists_start[1][0]:
                 leg1 = dists_start[1][1]
-            else:
+            elif len(dists_end) > 1:
                 leg2 = dists_end[1][1]
-        n_face = face_normal(leg1,leg2)
-        #draw normal face of each brace
-        nx, ny, nz = [], [], []
-        mid = midpoint(member)
-        vec_face_x = n_face[0] + mid[0]
-        vec_face_y = n_face[1] + mid[1]
-        vec_face_z = n_face[2] + mid[2]
-        nx.extend([mid[0], vec_face_x, None])
-        ny.extend([mid[1], vec_face_y, None])
-        nz.extend([mid[2], vec_face_z, None])
-        fig.add_trace(go.Scatter3d(
-            x=nx, y=ny, z=nz,
-            mode='lines',
-            line=dict(color='yellow', width=6),
-            name='Brace n_face'
-        ))
-        for A,B in [(leg1,leg2),(leg2,leg1)]:
-            leg_width,_ = parse_section_dims(A['Section'])
-            p_line,d_line = offset_leg_line(A,B,leg_width)
+        
+        n_face = face_normal(leg1, leg2)
+        
+        hole_num = 1
+        for A, B in [(leg1, leg2), (leg2, leg1)]:
+            leg_width, _ = parse_section_dims(A['Section'])
+            p_line, d_line = offset_leg_line(A, B, leg_width)
 
-            member_p = np.array([member.StartX,member.StartY,member.StartZ])
+            member_p = np.array([member.StartX, member.StartY, member.StartZ])
             member_d = vec(member)
 
             hole_center = closest_point_between_lines(
-                p_line,d_line,member_p,member_d
+                p_line, d_line, member_p, member_d
             )
             if hole_center is None:
                 continue
 
-            verts,idx = generate_cylinder(
-                hole_center,n_face,HOLE_RADIUS,HOLE_CYLINDER_LENGTH
+            # Save hole data
+            hole_info = {
+                "MemberID": int(member.loc['ID']),
+                "MemberType": member.loc['MemberClass'],
+                "Section": member.loc['Section'],
+                "HoleNumber": hole_num,
+                "HoleCenterX": float(hole_center[0]),
+                "HoleCenterY": float(hole_center[1]),
+                "HoleCenterZ": float(hole_center[2]),
+                "NormalX": float(n_face[0]),
+                "NormalY": float(n_face[1]),
+                "NormalZ": float(n_face[2]),
+                "ConnectedLegID": int(A.loc['ID']),
+                "Radius": HOLE_RADIUS,
+                "Depth": HOLE_CYLINDER_LENGTH
+            }
+            holes_data.append(hole_info)
+            hole_num += 1
+
+            verts, idx = generate_cylinder(
+                hole_center, n_face, HOLE_RADIUS, HOLE_CYLINDER_LENGTH
             )
 
-            xs,ys,zs = zip(*verts)
+            xs, ys, zs = zip(*verts)
             fig.add_trace(go.Mesh3d(
-                x=xs,y=ys,z=zs,
-                i=idx[0::3],j=idx[1::3],k=idx[2::3],
-                color='black',opacity=1,
+                x=xs, y=ys, z=zs,
+                i=idx[0::3], j=idx[1::3], k=idx[2::3],
+                color='black', opacity=1,
+                showlegend=False
             ))
 
+    # Save holes to CSV
+    if save_holes and holes_data:
+        save_holes_to_csv(holes_data, "holes_data.csv")
+
     fig.update_layout(
-        scene=dict(aspectmode='cube'),
-        width=1200,height=900,
+        scene=dict(aspectmode='data'),
+        width=1200, height=900,
         title="BRK Visualizer – Holes on Braces & Horizontals"
     )
     fig.show()
+    
+    return holes_data
 
 # ==========================================================
 # RUN
 # ==========================================================
 
 if __name__ == "__main__":
-    visualize_tower("data.csv")
+    # Run visualization and hole detection
+    holes = visualize_tower("data.csv", save_holes=True)
+    print(f"\nTotal holes found: {len(holes)}")
+    
+    # Merge holes with members
+    merge_holes_with_members("data.csv", "holes_data.csv", "data_with_holes.csv")
+    
+    # NEW: Analyze braces by section
+    print("\n" + "="*50)
+    print("Analyzing braces by section...")
+    print("="*50)
+    analyze_braces_by_section("data.csv", "holes_data.csv", "braces_analysis.csv")
