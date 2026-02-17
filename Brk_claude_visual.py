@@ -514,13 +514,13 @@ def visualize_tower(csv_path, save_holes=True):
         dists_start = [
             (np.linalg.norm(p_start - midpoint(l)), l)
             for _, l in legs.iterrows()
-            if min(l.loc['StartZ'], l.loc['EndZ']) <= member.loc['StartZ'] <= max(l.loc['StartZ'], l.loc['EndZ'])
+            if min(l.loc['StartZ'], l.loc['EndZ']) <= midpoint(member)[2] <= max(l.loc['StartZ'], l.loc['EndZ'])
         ]
 
         dists_end = [
             (np.linalg.norm(p_end - midpoint(l)), l)
             for _, l in legs.iterrows()
-            if min(l.loc['StartZ'], l.loc['EndZ']) <= member.loc['EndZ'] <= max(l.loc['StartZ'], l.loc['EndZ'])
+            if min(l.loc['StartZ'], l.loc['EndZ']) <= midpoint(member)[2] <= max(l.loc['StartZ'], l.loc['EndZ'])
         ]
 
         if not dists_start or not dists_end:
@@ -592,8 +592,8 @@ def visualize_tower(csv_path, save_holes=True):
         save_holes_to_csv(holes_data, "holes_data.csv")
 
     fig.update_layout(
-        scene=dict(aspectmode='data'),
-        width=1200, height=900,
+        scene=dict(aspectmode='cube'),
+        width=1200,height=900,
         title="BRK Visualizer – Holes on Braces & Horizontals"
     )
     fig.show()
