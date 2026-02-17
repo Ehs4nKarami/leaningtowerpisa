@@ -97,25 +97,48 @@ def classify_members(elements):
 
     return legs, braces, horizontals
 
-def assaing_brace_to_leg(braces, legs, tol=0):
-    for i in braces:
-        i['Leg_Start'] = None
-        i['Leg_End'] = None
-        for j in legs:
-            if (min(j['StartZ'], j['EndZ']) - tol <= i['StartZ'] <= max(j['StartZ'], j['EndZ']) + tol) \
-               and (min(j['StartY'], j['EndY']) - tol <= i['StartY'] <= max(j['StartY'], j['EndY']) + tol) \
-               and (min(j['StartX'], j['EndX']) - tol <= i['StartX'] <= max(j['StartX'], j['EndX']) + tol):
-                i['Leg_Start'] = j
+def assaing_brace_to_leg(braces, legs):
+    def midpoint(member):
+        return np.array([
+            (member['StartX'] + member['EndX']) / 2,
+            (member['StartY'] + member['EndY']) / 2,
+            (member['StartZ'] + member['EndZ']) / 2
+        ])
 
-            if (min(j['StartZ'], j['EndZ']) - tol <= i['EndZ'] <= max(j['StartZ'], j['EndZ']) + tol) \
-               and (min(j['StartY'], j['EndY']) - tol <= i['EndY'] <= max(j['StartY'], j['EndY']) + tol) \
-               and (min(j['StartX'], j['EndX']) - tol <= i['EndX'] <= max(j['StartX'], j['EndX']) + tol):
-                i['Leg_End'] = j
+    for brace in braces:
+        brace['Leg_Start'] = None
+        brace['Leg_End'] = None
 
-            if i['Leg_Start'] is not None and i['Leg_End'] is not None:
-                break
-        if i['Leg_Start'] is None or i['Leg_End'] is None:
-            print(f"Warning: Brace ID {i['ID']} missing leg linkage (tol={tol})")
+        p_start = np.array([brace['StartX'], brace['StartY'], brace['StartZ']])
+        p_end   = np.array([brace['EndX'],   brace['EndY'],   brace['EndZ']])
+
+        # ---------- START POINT ----------
+        dists_start = [
+            (np.linalg.norm(p_start - midpoint(leg)), leg)
+            for leg in legs
+            if min(leg['StartZ'], leg['EndZ']) <= midpoint(brace)[2] <= max(leg['StartZ'], leg['EndZ'])
+        ]
+
+        # ---------- END POINT ----------
+        dists_end = [
+            (np.linalg.norm(p_end - midpoint(leg)), leg)
+            for leg in legs
+            if min(leg['StartZ'], leg['EndZ']) <= midpoint(brace)[2] <= max(leg['StartZ'], leg['EndZ'])
+        ]
+
+        if not dists_start or not dists_end:
+            raise ValueError(f"No matching legs found for brace ID {brace['ID']}")
+
+        dists_start.sort(key=lambda x: x[0])
+        dists_end.sort(key=lambda x: x[0])
+
+        brace['Leg_Start'] = dists_start[0][1]
+        brace['Leg_End']   = dists_end[0][1]
+        if brace['Leg_Start']['ID'] == brace['Leg_End']['ID']:
+            if dists_start[0][0] == dists_start[1][0]:
+                brace['Leg_Start'] = dists_start[1][1]
+            else:
+                brace['Leg_End'] = dists_end[1][1]
 
     return braces
 
@@ -224,7 +247,7 @@ if "__main__" == __name__:
     legs, braces, horizontals = classify_members(elements)
     assainged_braces = assaing_brace_to_leg(braces, legs)
     save_to_csv(assainged_braces,"assainged_braaces.csv")
-    spaced_braces = space_from_legs_2(assainged_braces, 0.05) 
+    spaced_braces = space_from_legs_2(assainged_braces, 0.1) 
     center_tower = center_of_tower(legs)
     pushed_out_braces = push_out_of_leg(assainged_braces, center_tower, 0)
     pushed_out_braces = push_out_of_leg(assainged_braces, center_tower, 0)

@@ -76,7 +76,7 @@ def visualize_tower(csv_path):
             xaxis=dict(title='X (m)', range=x_range),
             yaxis=dict(title='Y (m)', range=y_range),
             zaxis=dict(title='Z (m)', range=z_range),
-            aspectmode='data',
+            aspectmode='cube',
             camera=dict(eye=dict(x=1.8, y=1.8, z=1.5))
         ),
         width=1200,
